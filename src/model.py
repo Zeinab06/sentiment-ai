@@ -1,6 +1,6 @@
 class SentimentModel:
     def __init__(self):
-        print("[SentimentModel] Modèle chargé")
+        print("[SentimentModel] Modele charge")
 
     def predict(self, text: str) -> dict:
         text_lower = text.lower()
@@ -8,7 +8,7 @@ class SentimentModel:
             "bien", "super", "excellent", "parfait", "bon", "aime", "adore"
         ]
         negative_words = [
-            "mal", "nul", "horrible", "mauvais", "déteste", "pire"
+            "mal", "nul", "horrible", "mauvais", "deteste", "pire"
         ]
 
         pos = sum(1 for w in positive_words if w in text_lower)
@@ -21,4 +21,3 @@ class SentimentModel:
             return {"label": "NEGATIVE", "score": round(0.6 + 0.1 * neg, 2),
                     "text": text}
         return {"label": "NEUTRAL", "score": 0.5, "text": text}
-    
