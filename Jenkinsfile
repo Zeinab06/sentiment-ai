@@ -135,20 +135,22 @@ pipeline {
                 }
             }
         }
-
-        stage('Deploy Staging') {
-            when {
-                expression { return true }
-            }
-            steps {
-                echo "Déploiement de ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} en staging..."
-                sh '''
-                    docker compose -f docker-compose.yml -p staging down 2>/dev/null || true
-                    docker compose -f docker-compose.yml -p staging up -d
-                    echo "Staging disponible sur http://localhost:8081"
-                '''
-            }
+    stage('Deploy Staging') {
+    when {
+        expression { return true }
+    }
+    steps {
+        echo "Déploiement de ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} en staging..."
+        sh '''
+            docker stop sentiment-staging 2>/dev/null || true
+            docker rm sentiment-staging 2>/dev/null || true
+            docker run -d \
+                --name sentiment-staging \
+                --network cicd-network \
+                -p 8081:8000 \
+                sentiment-ai:''' + "${IMAGE_TAG}"
         }
+    }
     }
 
     post {
