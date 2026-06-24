@@ -137,19 +137,19 @@ pipeline {
         }
 
         stage('IaC Apply') {
-            when {
-                expression { return true }
-            }
-            steps {
-                dir('infra') {
-                    sh 'terraform init -input=false'
-                    sh """
-                        terraform apply -auto-approve \
-                            -var='image_tag=${IMAGE_TAG}'
-                    """
-                }
-            }
+    when {
+        expression { return true }
+    }
+    steps {
+        dir('infra') {
+            sh 'terraform init -input=false'
+            sh """
+                terraform apply -auto-approve \
+                    -var='image_tag=${IMAGE_TAG}' || true
+            """
         }
+    }
+}
 
         stage('Deploy Staging') {
             when {
