@@ -1,20 +1,8 @@
-from fastapi import FastAPI
-from src.schemas import PredictionRequest, PredictionResponse
-from src.model import SentimentModel
+# Active ton venv d'abord
+source venv/bin/activate  # ou .venv/bin/activate
 
-app = FastAPI(title="SentimentAI", version="0.1.0")
+# Installe les nouvelles dépendances
+pip install -r requirements.txt
 
-# Le modèle est chargé une seule fois au démarrage du serveur
-model = SentimentModel()
-
-
-@app.get("/health")
-def health():
-    """Endpoint de healthcheck utilisé par Docker et les load balancers."""
-    return {"status": "ok"}
-
-
-@app.post("/predict", response_model=PredictionResponse)
-def predict(request: PredictionRequest):
-    """Analyse le sentiment du texte fourni et retourne un label + score."""
-    return model.predict(request.text)
+# Lance l'app
+python3 -m uvicorn src.main:app --reload --port 8000
