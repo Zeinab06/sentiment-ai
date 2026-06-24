@@ -29,6 +29,17 @@ pipeline {
             }
         }
 
+        // NOUVEAU TP4 - toutes les branches
+        stage('IaC Validate') {
+            steps {
+                dir('infra') {
+                    sh 'terraform init -backend=false -input=false'
+                    sh 'terraform fmt -check'
+                    sh 'terraform validate'
+                }
+            }
+        }
+
         stage('Build & Test') {
             steps {
                 sh '''
@@ -115,9 +126,7 @@ pipeline {
         }
 
         stage('Push') {
-            when {
-                expression { return true }
-            }
+            when { branch 'main' }
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'github-token',
@@ -135,22 +144,27 @@ pipeline {
                 }
             }
         }
-    stage('Deploy Staging') {
-    when {
-        expression { return true }
-    }
-    steps {
-        echo "Déploiement de ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} en staging..."
-        sh '''
-            docker stop sentiment-staging 2>/dev/null || true
-            docker rm sentiment-staging 2>/dev/null || true
-            docker run -d \
-                --name sentiment-staging \
-                --network cicd-network \
-                -p 8081:8000 \
-                sentiment-ai:''' + "${IMAGE_TAG}"
+
+        // NOUVEAU TP4 - main seulement, après Push
+        stage('IaC Apply') {
+            when { branch 'main' }
+            steps {
+                dir('infra') {
+                    sh 'terraform init -input=false'
+                    sh """
+                        terraform apply -auto-approve \
+                            -var='image_tag=${IMAGE_TAG}'
+                    """
+                }
+            }
         }
-    }
+
+        stage('Deploy Staging') {
+            when { branch 'main' }
+            steps {
+                sh 'curl -f http://localhost:8001/health || exit 1'
+            }
+        }
     }
 
     post {
