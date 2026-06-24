@@ -29,7 +29,6 @@ pipeline {
             }
         }
 
-        // NOUVEAU TP4 - toutes les branches
         stage('IaC Validate') {
             steps {
                 dir('infra') {
@@ -46,14 +45,10 @@ pipeline {
                     docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
                     docker rm -f test-runner 2>/dev/null || true
                     set +e
-                    docker run \
-                        -e CI=true \
-                        --name test-runner \
+                    docker run -e CI=true --name test-runner \
                         ${IMAGE_NAME}:${IMAGE_TAG} \
-                        pytest tests/ -v \
-                        --cov=src \
+                        pytest tests/ -v --cov=src \
                         --cov-report=xml:/tmp/coverage.xml \
-                        --cov-report=term-missing \
                         --cov-fail-under=70
                     TEST_EXIT_CODE=$?
                     set -e
@@ -117,16 +112,12 @@ pipeline {
                         --format table \
                         ''' + "${IMAGE_NAME}:${IMAGE_TAG}"
             }
-            post {
-                failure {
-                    echo 'Vulnérabilités CRITICAL ou HIGH détectées !'
-                    echo 'Corrigez les dépendances avant de déployer.'
-                }
-            }
         }
 
         stage('Push') {
-            when { branch 'main' }
+            when {
+                expression { return true }
+            }
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'github-token',
@@ -145,9 +136,10 @@ pipeline {
             }
         }
 
-        // NOUVEAU TP4 - main seulement, après Push
         stage('IaC Apply') {
-            when { branch 'main' }
+            when {
+                expression { return true }
+            }
             steps {
                 dir('infra') {
                     sh 'terraform init -input=false'
@@ -160,9 +152,49 @@ pipeline {
         }
 
         stage('Deploy Staging') {
-            when { branch 'main' }
+            when {
+                expression { return true }
+            }
             steps {
-                sh 'curl -f http://localhost:8001/health || exit 1'
+                echo "Déploiement de ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} en staging..."
+                sh '''
+                    docker stop sentiment-staging 2>/dev/null || true
+                    docker rm sentiment-staging 2>/dev/null || true
+                    docker run -d \
+                        --name sentiment-staging \
+                        --network cicd-network \
+                        -p 8001:8000 \
+                        sentiment-ai:''' + "${IMAGE_TAG}"
+            }
+        }
+
+        stage('Smoke Test') {
+            when {
+                expression { return true }
+            }
+            steps {
+                sh '''
+                    echo "Attente démarrage (10s)..."
+                    sleep 10
+                    curl -f http://localhost:8001/health || exit 1
+                    echo "/health OK"
+                    curl -s http://localhost:8001/metrics | \
+                        grep -q sentiment_predictions_total || exit 1
+                    echo "/metrics OK -- métriques SentimentAI présentes"
+                    sleep 20
+                    curl -s "http://localhost:9090/api/v1/query?query=up{job='sentiment-ai'}" | \
+                        grep -q '"value"' || exit 1
+                    echo "Prometheus scrape sentiment-ai : UP"
+                    curl -f http://localhost:3000/api/health || exit 1
+                    echo "Grafana OK"
+                '''
+            }
+            post {
+                failure {
+                    sh 'docker logs prometheus || true'
+                    sh 'docker logs sentiment-staging || true'
+                    echo 'Smoke Test KO -- voir logs ci-dessus'
+                }
             }
         }
     }
