@@ -9,26 +9,24 @@ app = FastAPI(title="SentimentAI", version="0.1.0")
 
 model = SentimentModel()
 
-# Métriques métier SentimentAI
 predictions_total = Counter(
     "sentiment_predictions_total",
-    "Nombre total de prédictions",
+    "Nombre total de predictions",
     ["label", "status"]
 )
 
 confidence_gauge = Gauge(
     "sentiment_confidence_score",
-    "Score de confiance de la dernière prédiction",
+    "Score de confiance de la derniere prediction",
     ["label"]
 )
 
 prediction_duration = Histogram(
     "sentiment_prediction_duration_seconds",
-    "Durée des prédictions en secondes",
+    "Duree des predictions en secondes",
     buckets=[0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5]
 )
 
-# Instrumentation automatique HTTP
 Instrumentator().instrument(app).expose(app)
 
 
@@ -50,4 +48,3 @@ def predict(request: PredictionRequest):
     except Exception:
         predictions_total.labels(label="UNKNOWN", status="error").inc()
         raise
-    
