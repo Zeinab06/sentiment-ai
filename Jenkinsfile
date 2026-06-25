@@ -59,7 +59,7 @@ pipeline {
             }
             post {
                 failure {
-                    echo 'Tests échoués ou coverage insuffisant (<70%)'
+                    echo 'Tests echoues ou coverage insuffisant (<70%)'
                 }
             }
         }
@@ -92,17 +92,17 @@ pipeline {
             }
         }
 
-      stage('Quality Gate') {
-    steps {
-        timeout(time: 15, unit: 'MINUTES') {
-            waitForQualityGate abortPipeline: false
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 15, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: false
+                }
+            }
         }
-    }
-}
 
         stage('Security Scan') {
             steps {
-                sh '''
+                sh """
                     docker run --rm \
                         -v /var/run/docker.sock:/var/run/docker.sock \
                         -v trivy-cache:/root/.cache/trivy \
@@ -110,14 +110,12 @@ pipeline {
                         --severity HIGH,CRITICAL \
                         --exit-code 0 \
                         --format table \
-                        ''' + "${IMAGE_NAME}:${IMAGE_TAG}"
+                        ${IMAGE_NAME}:${IMAGE_TAG}
+                """
             }
         }
 
         stage('Push') {
-            when {
-                expression { return true }
-            }
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'github-token',
@@ -137,76 +135,69 @@ pipeline {
         }
 
         stage('IaC Apply') {
-    when {
-        expression { return true }
-    }
-    steps {
-        dir('infra') {
-            sh 'terraform init -input=false'
-            sh """
-                terraform apply -auto-approve \
-                    -var='image_tag=${IMAGE_TAG}' || true
-            """
+            steps {
+                dir('infra') {
+                    sh 'terraform init -input=false'
+                    sh """
+                        terraform apply -auto-approve \
+                            -var='image_tag=${IMAGE_TAG}' || true
+                    """
+                }
+            }
         }
-    }
-}
 
         stage('Deploy Staging') {
-            when {
-                expression { return true }
-            }
             steps {
-                echo "Déploiement de ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} en staging..."
-                sh '''
+                echo "Deploiement de ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} en staging..."
+                sh """
                     docker stop sentiment-staging 2>/dev/null || true
                     docker rm sentiment-staging 2>/dev/null || true
                     docker run -d \
                         --name sentiment-staging \
                         --network cicd-network \
                         -p 8001:8000 \
-                        sentiment-ai:''' + "${IMAGE_TAG}"
+                        ${IMAGE_NAME}:${IMAGE_TAG}
+                """
             }
         }
 
-     stage('Smoke Test') {
-    when {
-        expression { return true }
-    }
-    steps {
-        sh '''
-            echo "Attente démarrage (10s)..."
-            sleep 10
-            curl -f http://sentiment-staging:8000/health || exit 1
-            echo "/health OK"
-            curl -s http://sentiment-staging:8000/metrics | \
-                grep -q sentiment_predictions_total || exit 1
-            echo "/metrics OK -- métriques SentimentAI présentes"
-            sleep 20
-            curl -s "http://prometheus:9090/api/v1/query?query=up{job='sentiment-ai'}" | \
-                grep -q '"value"' || exit 1
-            echo "Prometheus scrape sentiment-ai : UP"
-            curl -f http://grafana:3000/api/health || exit 1
-            echo "Grafana OK"
-        '''
-    }
-    post {
-        failure {
-            sh 'docker logs prometheus || true'
-            sh 'docker logs sentiment-staging || true'
-            echo 'Smoke Test KO -- voir logs ci-dessus'
+        stage('Smoke Test') {
+            steps {
+                sh '''
+                    echo "Attente demarrage (10s)..."
+                    sleep 10
+                    docker exec sentiment-staging curl -f http://localhost:8000/health || exit 1
+                    echo "/health OK"
+                    docker exec sentiment-staging curl -s http://localhost:8000/metrics | \
+                        grep -q sentiment_predictions_total || exit 1
+                    echo "/metrics OK"
+                    sleep 20
+                    curl -s "http://localhost:9090/api/v1/query?query=up" | \
+                        grep -q "success" || exit 1
+                    echo "Prometheus OK"
+                    curl -f http://localhost:3000/api/health || exit 1
+                    echo "Grafana OK"
+                '''
+            }
+            post {
+                failure {
+                    sh 'docker logs prometheus || true'
+                    sh 'docker logs sentiment-staging || true'
+                    echo 'Smoke Test KO -- voir logs ci-dessus'
+                }
+            }
         }
     }
-}
 
     post {
         always {
             sh 'docker compose down -v 2>/dev/null || true'
         }
         success {
-            echo "Pipeline réussi ! Image : ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
+            echo "Pipeline reussi ! Image : ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
         }
         failure {
-            echo 'Pipeline échoué. Consultez les logs ci-dessus.'
+            echo 'Pipeline echoue. Consultez les logs ci-dessus.'
         }
     }
 }
