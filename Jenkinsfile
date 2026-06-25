@@ -168,36 +168,35 @@ pipeline {
             }
         }
 
-        stage('Smoke Test') {
-            when {
-                expression { return true }
-            }
-            steps {
-                sh '''
-                    echo "Attente démarrage (10s)..."
-                    sleep 10
-                    curl -f http://localhost:8001/health || exit 1
-                    echo "/health OK"
-                    curl -s http://localhost:8001/metrics | \
-                        grep -q sentiment_predictions_total || exit 1
-                    echo "/metrics OK -- métriques SentimentAI présentes"
-                    sleep 20
-                    curl -s "http://localhost:9090/api/v1/query?query=up{job='sentiment-ai'}" | \
-                        grep -q '"value"' || exit 1
-                    echo "Prometheus scrape sentiment-ai : UP"
-                    curl -f http://localhost:3000/api/health || exit 1
-                    echo "Grafana OK"
-                '''
-            }
-            post {
-                failure {
-                    sh 'docker logs prometheus || true'
-                    sh 'docker logs sentiment-staging || true'
-                    echo 'Smoke Test KO -- voir logs ci-dessus'
-                }
-            }
+     stage('Smoke Test') {
+    when {
+        expression { return true }
+    }
+    steps {
+        sh '''
+            echo "Attente démarrage (10s)..."
+            sleep 10
+            curl -f http://sentiment-staging:8000/health || exit 1
+            echo "/health OK"
+            curl -s http://sentiment-staging:8000/metrics | \
+                grep -q sentiment_predictions_total || exit 1
+            echo "/metrics OK -- métriques SentimentAI présentes"
+            sleep 20
+            curl -s "http://prometheus:9090/api/v1/query?query=up{job='sentiment-ai'}" | \
+                grep -q '"value"' || exit 1
+            echo "Prometheus scrape sentiment-ai : UP"
+            curl -f http://grafana:3000/api/health || exit 1
+            echo "Grafana OK"
+        '''
+    }
+    post {
+        failure {
+            sh 'docker logs prometheus || true'
+            sh 'docker logs sentiment-staging || true'
+            echo 'Smoke Test KO -- voir logs ci-dessus'
         }
     }
+}
 
     post {
         always {
